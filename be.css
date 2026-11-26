@@ -1,0 +1,74 @@
+/* Site du solaire belge : couleurs belges sobres (noir dominant, jaune et rouge en touches) ; le reste vient de style.css / design.css, copiés du site du prix. */
+:root {
+  --be-noir: #141414; --be-noir-2: #262626; --be-jaune: #e2b112; --be-rouge: #c8282f;
+  --bleu: var(--be-noir); --orange: var(--be-jaune); --action: #8a6a00;
+  --page: #f4f3f0; --wash: #f7f6f2; --border: #e4e1da; --surbrillance: #f1ece0; --plot: #fbfaf7;
+  --ink: #1a1a1a; --ink-2: #4a4843; --muted: #7c786f; --grid: #ebe8e1; --axis: #d2cec4;
+  --m-BE5: #c99400; --m-BE4: #c8282f; --m-BE3: #8c6a3c; --m-BE2: #6e6e6e; --m-BE1: #b0aaa0;
+  --s-elia: #46658f; --s-reel: #141414;
+  --bande-nous: rgba(226, 177, 18, .22); --bande-elia: rgba(70, 101, 143, .14);
+  --bon: #2a7d55; --mauvais: #c8282f;
+}
+:root[data-theme="dark"] {
+  --page: #0e0e0e; --surface: #181818; --wash: #1f1f1f; --border: #303030; --surbrillance: #2c2a24; --plot: #121212;
+  --ink: #f2f0ea; --ink-2: #cfcac0; --muted: #a39e93; --grid: #2a2a2a; --axis: #444; --sidebar-fond: #0a0a0a; --sidebar-trait: #262626;
+  --m-BE5: #f2c230; --m-BE4: #ff6b6b; --m-BE3: #c9a26b; --m-BE2: #a8a8a8; --m-BE1: #6f6a62;
+  --s-elia: #8fb0dc; --s-reel: #f2f0ea; --bande-nous: rgba(242, 194, 48, .20); --bande-elia: rgba(143, 176, 220, .14);
+  --bon: #5fcf98; --mauvais: #ff7b7b; --action: #f2c230;
+}
+/* barre latérale noire, liseré tricolore en haut */
+.navigation-laterale { background: var(--be-noir); }
+.navigation-laterale::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 4px; background: linear-gradient(90deg, #1a1a1a 0 33.3%, var(--be-jaune) 33.3% 66.6%, var(--be-rouge) 66.6%); }
+:root[data-theme="dark"] .navigation-laterale { background: var(--sidebar-fond); }
+.onglets button[aria-selected="true"] { background: var(--be-noir-2); }
+.onglets button[aria-selected="true"]::before { background: var(--be-jaune); }
+.onglets button[aria-selected="true"] svg { color: var(--be-jaune); }
+.identite-signe { color: var(--be-jaune); }
+.segments button[aria-pressed="true"], .segments button[aria-pressed="true"]:hover { background: var(--be-noir); }
+:root[data-theme="dark"] .segments button[aria-pressed="true"], :root[data-theme="dark"] .segments button[aria-pressed="true"]:hover { background: #3a3a3a; }
+.tuile.principal { border-color: #ead9a6; border-top: 3px solid var(--be-noir); background: #fffbef; }
+.tuile.principal .duo-valeurs > div:first-child .valeur { color: #9a7200; }
+.tuile.principal .duo-valeurs > div + div { border-color: #eee2bd; }
+:root[data-theme="dark"] .tuile.principal { background: #221d10; border-color: #4a3d16; border-top-color: var(--be-jaune); }
+:root[data-theme="dark"] .tuile.principal .duo-valeurs > div:first-child .valeur { color: var(--be-jaune); }
+.badge.fort { background: #f1ece0; color: #6b5300; }
+:root[data-theme="dark"] .badge.fort { background: #2c2a24; color: #f2c230; }
+.maj::before { background: var(--be-jaune); }
+
+/* mise en page */
+.bloc-jour { display: block; }
+.be-grille { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 20px; align-items: start; }
+.be-tuiles { display: flex; flex-direction: column; gap: 14px; margin: 0; }
+.be-tuiles .tuile.principal { order: 0; }
+.be-barre { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin: 0 0 12px; }
+.be-barre .etiq { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }
+.be-cases { display: flex; flex-wrap: wrap; gap: 6px; }
+.be-case { display: inline-flex; align-items: center; gap: 6px; padding: 4px 9px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--ink-2); font-size: 11px; cursor: pointer; user-select: none; }
+.be-case input { margin: 0; accent-color: var(--be-noir); }
+:root[data-theme="dark"] .be-case input { accent-color: var(--be-jaune); }
+.be-case.inactif { opacity: .45; cursor: not-allowed; }
+.be-case i { display: inline-block; width: 14px; height: 0; border-top: 2.5px solid currentColor; }
+.be-case i.tirets { border-top-style: dashed; }
+.be-case i.bande { height: 9px; border: 0; border-radius: 2px; }
+.be-chiffres { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin: 16px 0; }
+.be-chiffre { padding: 14px 16px; border: 1px solid var(--border); border-radius: 10px; background: var(--wash); }
+.be-chiffre .petit { color: var(--muted); font-size: 10px; letter-spacing: .3px; text-transform: uppercase; }
+.be-chiffre .grand { margin-top: 4px; font-size: 26px; letter-spacing: -.5px; color: var(--ink); font-variant-numeric: tabular-nums; }
+.be-chiffre .grand small { font-size: 11px; color: var(--muted); letter-spacing: 0; }
+.be-chiffre .sous { margin-top: 4px; font-size: 11px; color: var(--ink-2); }
+.bon { color: var(--bon) !important; } .mauvais { color: var(--mauvais) !important; }
+.be-texte p { max-width: 760px; line-height: 1.7; font-size: 13px; color: var(--ink-2); }
+.be-texte .petit-titre { margin-top: 18px; }
+.be-texte .petit-titre:first-child { margin-top: 0; }
+.table-donnees td.nombre, .table-donnees th.nombre { text-align: right; font-variant-numeric: tabular-nums; }
+.table-donnees tr.choisi td { font-weight: 700; }
+.table-donnees tr.cliquable { cursor: pointer; }
+.pastille-m { display: inline-block; width: 12px; height: 0; border-top: 3px solid currentColor; margin-right: 7px; vertical-align: middle; }
+.be-nav { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 0 0 14px; }
+.be-nav .bouton.texte { font-size: 11px; padding: 5px 10px; }
+#r-ecarts { cursor: pointer; }
+@media (max-width: 980px) {
+  .be-grille { grid-template-columns: minmax(0, 1fr); }
+  .be-tuiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+  .navigation-laterale::before { height: 3px; }
+}
