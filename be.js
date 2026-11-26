@@ -2,7 +2,7 @@
    Onglets : Prévision (demain + tout l'historique, modèle au choix, courbes à cocher), Résultats (comparatif des modèles et d'Elia), Comment lire. */
 const $ = (id) => document.getElementById(id);
 const etat = { d: null, langue: "fr", onglet: "prevision", periode: "60", modele: "BE5", modeleR: "BE5", jour: null, graphs: {},
-  cases: { fourchette: true, reel: true, elia: true, elia_f: false, autres: false } };
+  cases: { fourchette: true, reel: true, elia: true, elia_f: false, naif: false, autres: false } };
 const FR = () => etat.langue === "fr";
 const t = (fr, en) => (FR() ? fr : en);
 function lire(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
@@ -39,6 +39,7 @@ function graphique(id, labels, S) {
   if (S.eliaF) bande("elia", S.eliaF[1], S.eliaF[0], css("--bande-elia"));
   if (S.nousF) bande("nous", S.nousF[1], S.nousF[0], css("--bande-nous"));
   (S.autres || []).forEach(([m, d]) => ligne(m, d, couleur(m), { borderWidth: 1.4 }));
+  if (S.naif) ligne(t("Repère naïf", "Naive"), S.naif, css("--s-naif"), { borderDash: [2, 3], borderWidth: 1.6 });
   if (S.elia) ligne("Elia", S.elia, css("--s-elia"), { borderDash: [6, 4] });
   if (S.nous) ligne(S.nous[0], S.nous[1], couleur(S.nous[0]), { borderWidth: 2.8 });
   if (S.reel) ligne(t("Production réelle", "Actual output"), S.reel, css("--s-reel"), { tension: 0.15 });
@@ -91,6 +92,7 @@ function afficherPrevision() {
     ["reel", `<i style="color:var(--s-reel)"></i>${t("Production réelle", "Actual output")}`, aReel],
     ["elia", `<i class="tirets" style="color:var(--s-elia)"></i>${eliaNom}`, aElia],
     ["elia_f", `<i class="bande" style="background:var(--bande-elia)"></i>${t("Fourchette d'Elia", "Elia's range")}`, aElia],
+    ["naif", `<i style="color:var(--s-naif)"></i>${t("Repère naïf (la veille)", "Naive benchmark (day before)")}`, !!X.nv],
     ["autres", `${autres.map((k) => `<i style="color:var(--m-${k})"></i>`).join("")}${t("Nos autres modèles", "Our other models")}`, autres.length > 0],
   ];
   $("etiq-courbes").textContent = t("Afficher", "Show");
@@ -100,51 +102,55 @@ function afficherPrevision() {
   graphique("d-graph", heures(X), {
     nous: [m, P.q50], nousF: c.fourchette ? [P.q10, P.q90] : null,
     reel: c.reel && aReel ? X.reel : null, elia: c.elia && aElia ? X.e50 : null, eliaF: c.elia_f && aElia ? [X.e10, X.e90] : null,
-    autres: c.autres ? autres.map((k) => [k, X.m[k].q50]) : [],
+    autres: c.autres ? autres.map((k) => [k, X.m[k].q50]) : [], naif: c.naif && X.nv ? X.nv : null,
   });
   $("d-note").textContent = t("Heures de Bruxelles, au quart d'heure. La fourchette contient la production 8 fois sur 10. Utilisez ‹ ›, les flèches du clavier ou le calendrier pour remonter les jours.",
     "Brussels time, quarter-hourly. The range should contain actual output 8 times out of 10. Use ‹ ›, the arrow keys or the calendar to browse past days.");
-  // tuiles
-  const e = P.q50.reduce((s, v) => s + (v || 0), 0) / 4000;
-  let ip = 0; P.q50.forEach((v, i) => { if (v > P.q50[ip]) ip = i; });
+  // tuiles : chaque prévision avec son erreur (comme le site du prix)
   const L = heures(X), s = X.s || {};
-  let tu = `<div class="tuile modele principal"><h3 class="titre-prevision">${t("Notre prévision", "Our forecast")}</h3>`
-    + `<div class="libelle"><span class="pastille" style="color:var(--m-${m})"></span>${m}</div>`
-    + `<div class="duo-valeurs"><div><div class="petit">${t("ÉNERGIE PRÉVUE SUR LA JOURNÉE", "ENERGY OVER THE DAY")}</div><div class="valeur">${nb(e, 1)} <small>GWh</small></div></div>`
-    + `<div><div class="petit">${t("pic à", "peak at")} ${L[ip]}</div><div class="valeur">${nb(P.q50[ip])} <small>MW</small></div></div></div></div>`;
-  if (s[m]) {
-    const r = s[m].rmse, re = s.Elia ? s.Elia.rmse : null;
-    tu += `<div class="tuile"><div class="libelle">${t("Notre erreur moyenne", "Our average error")}</div><div class="valeur ${re != null ? (r < re ? "bon" : "mauvais") : ""}">${nb(r)} <small>MW</small></div>`
-      + `<div class="detail">${re != null ? t(`Elia : ${nb(re)} MW, soit `, `Elia: ${nb(re)} MW, i.e. `) + signe(r / re - 1) + t(" pour nous", " for us") : ""}</div></div>`;
-    tu += `<div class="tuile"><div class="libelle">${t("Production réelle", "Actual output")}</div><div class="valeur">${nb(X.r_gwh, 1)} <small>GWh</small></div>`
-      + `<div class="detail">${t("prévu", "forecast")} ${nb(s[m].gwh, 1)}${s.Elia ? ` · Elia ${nb(s.Elia.gwh, 1)}` : ""} GWh</div></div>`;
-  } else {
-    tu += `<div class="tuile"><div class="libelle">${t("Fourchette au moment du pic", "Range at peak time")}</div><div class="valeur">${nb(P.q10[ip])} – ${nb(P.q90[ip])} <small>MW</small></div>`
-      + `<div class="detail">${t("La production devrait tomber dans cette fourchette 8 fois sur 10.", "Output should fall in this range 8 times out of 10.")}</div></div>`;
-    if (aElia) {
-      const ee = X.e50.reduce((a, v) => a + (v || 0), 0) / 4000;
-      tu += `<div class="tuile"><div class="libelle"><span class="pastille" style="color:var(--s-elia)"></span>${eliaNom}</div><div class="valeur">${nb(ee, 1)} <small>GWh</small></div>`
-        + `<div class="detail">${t("gestionnaire du réseau belge ; score dès que la production réelle est connue", "Belgian grid operator; scored once actual output is known")}</div></div>`;
-    }
-  }
+  const pct = (k) => (s[k] ? s[k].rmse / X.r_moy : null);
+  const ecart = (k, ref) => (s[k] && s[ref] ? s[k].rmse / s[ref].rmse - 1 : null);
+  const pic = (q) => { let ip = 0; q.forEach((v, i) => { if (v > q[ip]) ip = i; }); return ip; };
+  const energie = (q) => q.reduce((a, v) => a + (v || 0), 0) / 4000;
+  const blocErreur = (k) => {
+    const titre = `<div class="petit">${t("Erreur moyenne", "Average error")} <span class="err-pas">${t("au quart d'heure", "per quarter-hour")}</span></div>`;
+    if (!s[k]) return `<div class="bloc-erreur">${titre}<div class="err-attente">${t("Calculée dès que la production réelle est connue (le lendemain).", "Computed once actual output is known (the day after).")}</div></div>`;
+    const d = [`<span>${t("soit", "i.e.")} ${pc(pct(k), 1)} ${t("de la production moyenne", "of average output")}</span>`];
+    if (k !== "Elia" && s.Elia) d.push(`<span>${t("contre Elia :", "vs Elia:")} ${signe(ecart(k, "Elia"))}</span>`);
+    if (k !== "Naif" && s.Naif) d.push(`<span>${t("contre le repère naïf :", "vs naive benchmark:")} ${signe(ecart(k, "Naif"))}</span>`);
+    return `<div class="bloc-erreur">${titre}<div class="valeur erreur">${nb(s[k].rmse)} <small>MW</small></div><div class="err-detail">${d.join("")}</div></div>`;
+  };
+  const tuile = (cls, titre, nom, coul, q, k) => {
+    const ip = pic(q);
+    return `<div class="tuile modele ${cls}">${titre ? `<h3 class="titre-prevision">${titre}</h3>` : ""}<div class="libelle"><span class="pastille" style="color:${coul}"></span>${nom}</div>`
+      + `<div class="duo-valeurs"><div><div class="petit">${t("ÉNERGIE SUR LA JOURNÉE", "ENERGY OVER THE DAY")}</div><div class="valeur">${nb(energie(q), 1)} <small>GWh</small></div><div class="petit">${t("pic", "peak")} ${nb(q[ip])} MW ${t("à", "at")} ${L[ip]}</div></div>`
+      + (k ? blocErreur(k) : "") + `</div></div>`;
+  };
+  let tu = tuile("principal", t("Notre prévision", "Our forecast"), m, `var(--m-${m})`, P.q50, m);
+  if (aElia) tu += tuile("", "", eliaNom, "var(--s-elia)", X.e50, X.elia_src === "11h" ? "Elia" : null);
+  if (X.nv) tu += tuile("", "", t("Repère naïf : la veille", "Naive benchmark: day before"), "var(--s-naif)", X.nv, "Naif");
+  if (aReel && X.s) tu += tuile("", "", t("Production réelle", "Actual output"), "var(--s-reel)", X.reel, null);
+  if (!X.s) tu += `<div class="tuile"><div class="libelle">${t("Fourchette au moment du pic", "Range at peak time")}</div><div class="valeur">${nb(P.q10[pic(P.q50)])} – ${nb(P.q90[pic(P.q50)])} <small>MW</small></div>`
+    + `<div class="detail">${t("La production devrait tomber dans cette fourchette 8 fois sur 10.", "Output should fall in this range 8 times out of 10.")}</div></div>`;
   $("d-tuiles").innerHTML = tu;
-  // tableau du jour : chaque modèle contre Elia
-  $("d-table-titre").textContent = t("Scores du jour", "Scores for the day");
+  // tableau du jour : tous nos modèles, Elia et le repère naïf
+  $("d-table-titre").textContent = t("Comparatif des erreurs du jour", "Error comparison for the day");
   if (!X.s) {
     $("d-table").innerHTML = ""; $("d-table-note").textContent = t("La production réelle n'est pas encore connue : les scores seront calculés le lendemain matin.", "Actual output is not known yet: scores will be computed the next morning.");
     return;
   }
-  const lignes = MODELES().filter((k) => s[k]).map((k) => [k, `var(--m-${k})`, s[k]]);
-  if (s.Elia) lignes.push([t("Elia (veille, 11 h)", "Elia (day before, 11 am)"), "var(--s-elia)", s.Elia]);
-  $("d-table").innerHTML = `<thead><tr><th></th><th class="nombre">${t("Erreur moyenne (MW)", "Average error (MW)")}</th><th class="nombre">${t("Écart avec Elia", "vs Elia")}</th><th class="nombre">${t("Note de la fourchette", "Range score")}</th><th class="nombre">${t("Dans la fourchette", "Inside range")}</th><th class="nombre">${t("Énergie (GWh)", "Energy (GWh)")}</th></tr></thead><tbody>`
-    + lignes.map(([n, c, v]) => `<tr class="${n === m ? "choisi" : ""}"><td><span class="pastille-m" style="color:${c}"></span>${n}${X.m[n] && X.m[n].src === "direct" ? ` <small style="color:var(--muted)">${t("direct", "live")}</small>` : ""}</td><td class="nombre">${nb(v.rmse)}</td><td class="nombre">${s.Elia && v !== s.Elia ? signe(v.rmse / s.Elia.rmse - 1) : ""}</td><td class="nombre">${nb(v.wink)}</td><td class="nombre">${pc(v.couv)}</td><td class="nombre">${nb(v.gwh, 1)}</td></tr>`).join("")
-    + `<tr><td>${t("Production réelle", "Actual output")}</td><td></td><td></td><td></td><td></td><td class="nombre">${nb(X.r_gwh, 1)}</td></tr></tbody>`;
-  $("d-table-note").textContent = t("Erreur moyenne : écart typique entre la prévision et la production réelle (RMSE). Écart avec Elia : en vert quand nous faisons mieux qu'Elia. « Dans la fourchette » : part des quarts d'heure où la production réelle est dans la fourchette (cible 80 %).",
-    "Average error: typical gap between forecast and actual output (RMSE). vs Elia: green when we beat Elia. “Inside range”: share of quarter-hours where actual output fell in the range (target 80%).");
+  const lignes = MODELES().filter((k) => s[k]).map((k) => [k, k, `var(--m-${k})`]);
+  if (s.Elia) lignes.push(["Elia", t("Elia (veille, 11 h)", "Elia (day before, 11 am)"), "var(--s-elia)"]);
+  if (s.Naif) lignes.push(["Naif", t("Repère naïf (la veille)", "Naive (day before)"), "var(--s-naif)"]);
+  $("d-table").innerHTML = `<thead><tr><th></th><th class="nombre">${t("Erreur moyenne (MW)", "Average error (MW)")}</th><th class="nombre">${t("Erreur en %", "Error in %")}</th><th class="nombre">${t("Contre Elia", "vs Elia")}</th><th class="nombre">${t("Contre le repère naïf", "vs naive")}</th><th class="nombre">${t("Note de la fourchette", "Range score")}</th><th class="nombre">${t("Dans la fourchette", "Inside range")}</th><th class="nombre">${t("Énergie (GWh)", "Energy (GWh)")}</th></tr></thead><tbody>`
+    + lignes.map(([k, n, c]) => { const v = s[k]; return `<tr class="${k === m ? "choisi" : ""}"><td><span class="pastille-m" style="color:${c}"></span>${n}${X.m[k] && X.m[k].src === "direct" ? ` <small style="color:var(--muted)">${t("direct", "live")}</small>` : ""}</td><td class="nombre">${nb(v.rmse)}</td><td class="nombre">${pc(pct(k), 1)}</td><td class="nombre">${k !== "Elia" && s.Elia ? signe(ecart(k, "Elia")) : ""}</td><td class="nombre">${k !== "Naif" && s.Naif ? signe(ecart(k, "Naif")) : ""}</td><td class="nombre">${v.wink != null ? nb(v.wink) : "–"}</td><td class="nombre">${v.couv != null ? pc(v.couv) : "–"}</td><td class="nombre">${nb(v.gwh, 1)}</td></tr>`; }).join("")
+    + `<tr><td><span class="pastille-m" style="color:var(--s-reel)"></span>${t("Production réelle", "Actual output")}</td><td></td><td></td><td></td><td></td><td></td><td></td><td class="nombre">${nb(X.r_gwh, 1)}</td></tr></tbody>`;
+  $("d-table-note").textContent = t("Erreur moyenne : écart typique entre la prévision et la production réelle (RMSE). Erreur en % : rapportée à la production moyenne entre le lever et le coucher du soleil. « Contre » : en vert quand l'erreur est plus petite. Repère naïf : on prévoit pour demain la production d'aujourd'hui, quart d'heure par quart d'heure (il est un peu avantagé : aujourd'hui n'est pas fini à 10 h). Il n'a pas de fourchette.",
+    "Average error: typical gap between forecast and actual output (RMSE). Error in %: relative to average output between sunrise and sunset. “vs”: green when the error is smaller. Naive benchmark: tomorrow = today, quarter-hour by quarter-hour (slightly favoured: today is not over at 10 am). It has no range.");
 }
 
 /* ------------------------------------------------------------ onglet Résultats */
-const PERIODES = [["30", ["30 derniers jours", "Last 30 days"]], ["60", ["2 derniers mois", "Last 2 months"]], ["avril", ["Depuis avril 2026", "Since April 2026"]], ["tout", ["Depuis novembre 2025", "Since November 2025"]], ["direct", ["En direct seulement", "Live only"]]];
+const PERIODES = [["30", ["30 derniers jours", "Last 30 days"]], ["60", ["2 derniers mois", "Last 2 months"]], ["avril", ["Depuis avril 2026", "Since April 2026"]], ["direct", ["En direct seulement", "Live only"]]];
 function joursPeriode(p) {
   const J = jours().filter((j) => etat.d.jours[j].s && etat.d.jours[j].s.Elia);
   if (p === "direct") return J.filter((j) => Object.values(etat.d.jours[j].m).some((x) => x.src === "direct"));
@@ -155,7 +161,8 @@ function joursPeriode(p) {
 function resume(J, m) {
   const K = J.filter((j) => etat.d.jours[j].s[m]);
   const S = K.map((j) => etat.d.jours[j].s), g = (k, q) => moy(S.map((s) => s[k][q]));
-  return { n: K.length, jours: K, rmse: g(m, "rmse"), e_rmse: g("Elia", "rmse"), wink: g(m, "wink"), e_wink: g("Elia", "wink"), couv: g(m, "couv"), e_couv: g("Elia", "couv"),
+  const KN = K.filter((j) => etat.d.jours[j].s.Naif);
+  return { n: K.length, jours: K, n_rmse: moy(KN.map((j) => etat.d.jours[j].s.Naif.rmse)), m_rmse_n: moy(KN.map((j) => etat.d.jours[j].s[m].rmse)), rmse: g(m, "rmse"), e_rmse: g("Elia", "rmse"), wink: g(m, "wink"), e_wink: g("Elia", "wink"), couv: g(m, "couv"), e_couv: g("Elia", "couv"),
     prod: moy(K.map((j) => etat.d.jours[j].r_moy)), gagnes: S.filter((s) => s[m].rmse < s.Elia.rmse).length };
 }
 function afficherResultats() {
@@ -176,18 +183,27 @@ function afficherResultats() {
   $("r-chiffres").innerHTML =
     `<div class="be-chiffre"><div class="petit">${t("Erreur moyenne de", "Average error of")} ${m}</div><div class="grand">${nb(R.rmse)} <small>MW</small></div><div class="sous">${t("soit", "i.e.")} ${pc(R.rmse / R.prod, 1)} ${t("de la production moyenne de jour", "of average daytime output")}</div></div>`
     + `<div class="be-chiffre"><div class="petit">${t("Par rapport à Elia", "Compared with Elia")}</div><div class="grand">${signe(R.rmse / R.e_rmse - 1)}</div><div class="sous">${t("d'erreur (Elia :", "error (Elia:")} ${nb(R.e_rmse)} MW)</div></div>`
+    + `<div class="be-chiffre"><div class="petit">${t("Par rapport au repère naïf", "Compared with the naive benchmark")}</div><div class="grand">${signe(R.m_rmse_n / R.n_rmse - 1)}</div><div class="sous">${t("d'erreur (repère naïf :", "error (naive:")} ${nb(R.n_rmse)} MW)</div></div>`
     + `<div class="be-chiffre"><div class="petit">${t("Fourchettes par rapport à Elia", "Ranges compared with Elia")}</div><div class="grand">${signe(R.wink / R.e_wink - 1)}</div><div class="sous">${t("sur la note de la fourchette", "on the range score")}</div></div>`
     + `<div class="be-chiffre"><div class="petit">${t("Jours où", "Days where")} ${m} ${t("bat Elia", "beats Elia")}</div><div class="grand">${R.gagnes} <small>/ ${R.n}</small></div><div class="sous">${pc(R.gagnes / R.n)} ${t("des jours", "of days")}</div></div>`;
   // comparatif des modèles (chacun sur ses jours, comparé à Elia sur les mêmes jours)
   $("r-comp-titre").textContent = t("Comparatif de nos modèles (cliquez sur une ligne pour le détail)", "Our models compared (click a row for details)");
-  const RE = { n: J.length, e_rmse: moy(J.map((j) => etat.d.jours[j].s.Elia.rmse)), e_couv: moy(J.map((j) => etat.d.jours[j].s.Elia.couv)), prod: moy(J.map((j) => etat.d.jours[j].r_moy)) };
-  $("r-table").innerHTML = `<thead><tr><th>${t("Modèle", "Model")}</th><th class="nombre">${t("Jours", "Days")}</th><th class="nombre">${t("Erreur moyenne (MW)", "Average error (MW)")}</th><th class="nombre">${t("Erreur en %", "Error in %")}</th><th class="nombre">${t("Écart avec Elia", "vs Elia")}</th><th class="nombre">${t("Fourchettes vs Elia", "Ranges vs Elia")}</th><th class="nombre">${t("Dans la fourchette", "Inside range")}</th><th class="nombre">${t("Jours gagnés", "Days won")}</th></tr></thead><tbody>`
-    + dispo.map((k) => { const r = resume(J, k); return `<tr class="cliquable ${k === m ? "choisi" : ""}" data-m="${k}" title="${t(...DESCR[k])}"><td><span class="pastille-m" style="color:var(--m-${k})"></span>${k}${k === "BE5" ? ` <small style="color:var(--muted)">${t("en service", "live")}</small>` : ""}</td><td class="nombre">${r.n}</td><td class="nombre">${nb(r.rmse)}</td><td class="nombre">${pc(r.rmse / r.prod, 1)}</td><td class="nombre">${signe(r.rmse / r.e_rmse - 1)}</td><td class="nombre">${signe(r.wink / r.e_wink - 1)}</td><td class="nombre">${pc(r.couv)}</td><td class="nombre">${r.gagnes} / ${r.n}</td></tr>`; }).join("")
-    + `<tr><td><span class="pastille-m" style="color:var(--s-elia)"></span>Elia <small style="color:var(--muted)">${t("veille 11 h", "11 am")}</small></td><td class="nombre">${RE.n}</td><td class="nombre">${nb(RE.e_rmse)}</td><td class="nombre">${pc(RE.e_rmse / RE.prod, 1)}</td><td></td><td></td><td class="nombre">${pc(RE.e_couv)}</td><td></td></tr></tbody>`;
+  const KN = J.filter((j) => etat.d.jours[j].s.Naif);
+  const RE = { n: J.length, rmse: moy(J.map((j) => etat.d.jours[j].s.Elia.rmse)), couv: moy(J.map((j) => etat.d.jours[j].s.Elia.couv)), prod: moy(J.map((j) => etat.d.jours[j].r_moy)),
+    vsN: moy(KN.map((j) => etat.d.jours[j].s.Elia.rmse)) / moy(KN.map((j) => etat.d.jours[j].s.Naif.rmse)) - 1 };
+  const RN = { n: KN.length, rmse: moy(KN.map((j) => etat.d.jours[j].s.Naif.rmse)), prod: moy(KN.map((j) => etat.d.jours[j].r_moy)),
+    vsE: moy(KN.map((j) => etat.d.jours[j].s.Naif.rmse)) / moy(KN.map((j) => etat.d.jours[j].s.Elia.rmse)) - 1 };
+  const td = (x) => `<td class="nombre">${x}</td>`;
+  $("r-table").innerHTML = `<thead><tr><th>${t("Prévision", "Forecast")}</th><th class="nombre">${t("Jours", "Days")}</th><th class="nombre">${t("Erreur moyenne (MW)", "Average error (MW)")}</th><th class="nombre">${t("Erreur en %", "Error in %")}</th><th class="nombre">${t("Contre Elia", "vs Elia")}</th><th class="nombre">${t("Contre le repère naïf", "vs naive")}</th><th class="nombre">${t("Fourchettes contre Elia", "Ranges vs Elia")}</th><th class="nombre">${t("Dans la fourchette", "Inside range")}</th><th class="nombre">${t("Jours gagnés contre Elia", "Days won vs Elia")}</th></tr></thead><tbody>`
+    + dispo.map((k) => { const r = resume(J, k); return `<tr class="cliquable ${k === m ? "choisi" : ""}" data-m="${k}" title="${t(...DESCR[k])}"><td><span class="pastille-m" style="color:var(--m-${k})"></span>${k}${k === "BE5" ? ` <small style="color:var(--muted)">${t("en service", "live")}</small>` : ""}</td>`
+      + td(r.n) + td(nb(r.rmse)) + td(pc(r.rmse / r.prod, 1)) + td(signe(r.rmse / r.e_rmse - 1)) + td(signe(r.m_rmse_n / r.n_rmse - 1)) + td(signe(r.wink / r.e_wink - 1)) + td(pc(r.couv)) + td(`${r.gagnes} / ${r.n}`) + `</tr>`; }).join("")
+    + `<tr><td><span class="pastille-m" style="color:var(--s-elia)"></span>Elia <small style="color:var(--muted)">${t("veille 11 h", "11 am")}</small></td>` + td(RE.n) + td(nb(RE.rmse)) + td(pc(RE.rmse / RE.prod, 1)) + td("") + td(signe(RE.vsN)) + td("") + td(pc(RE.couv)) + td("") + `</tr>`
+    + (RN.n ? `<tr><td><span class="pastille-m" style="color:var(--s-naif)"></span>${t("Repère naïf", "Naive benchmark")} <small style="color:var(--muted)">${t("la veille", "day before")}</small></td>` + td(RN.n) + td(nb(RN.rmse)) + td(pc(RN.rmse / RN.prod, 1)) + td(signe(RN.vsE)) + td("") + td("") + td("–") + td("") + `</tr>` : "")
+    + `</tbody>`;
   $("r-table").querySelectorAll("tr[data-m]").forEach((tr) => tr.addEventListener("click", () => { etat.modeleR = tr.dataset.m; afficherResultats(); }));
   const nd = J.filter((j) => Object.values(etat.d.jours[j].m).some((x) => x.src === "direct")).length;
-  $("r-note").textContent = t(`${J.length} jours, du ${court(J[0])} au ${court(J[J.length - 1])} : ${nd} prévus en direct, les autres refaits sur le passé comme si on était la veille au matin. Chaque modèle est comparé à Elia sur ses propres jours : BE4 et BE5 n'existent que depuis avril 2026, sans l'hiver où l'erreur en MW est plus faible ; pour comparer les modèles entre eux, regardez la colonne « Écart avec Elia ». Erreur en % = erreur moyenne / production moyenne entre le lever et le coucher du soleil.`,
-    `${J.length} days, ${court(J[0])} to ${court(J[J.length - 1])}: ${nd} forecast live, the others replayed as if it were the morning before. Each model is compared with Elia on its own days: BE4 and BE5 only exist since April 2026, without the winter when MW errors are smaller; to compare models with each other, use the “vs Elia” column. Error in % = average error / average output between sunrise and sunset.`);
+  $("r-note").textContent = t(`${J.length} jours, du ${court(J[0])} au ${court(J[J.length - 1])} : ${nd} prévus en direct, les autres refaits sur le passé comme si on était la veille au matin. Tous les modèles, Elia et le repère naïf sont jugés sur les mêmes jours. Erreur en % = erreur moyenne / production moyenne entre le lever et le coucher du soleil. Repère naïf : on prévoit pour demain la production d'aujourd'hui (même quart d'heure) ; il sert à mesurer ce que les modèles apportent.`,
+    `${J.length} days, ${court(J[0])} to ${court(J[J.length - 1])}: ${nd} forecast live, the others replayed as if it were the morning before. All models, Elia and the naive benchmark are scored on the same days. Error in % = average error / average output between sunrise and sunset. Naive benchmark: tomorrow = today (same quarter-hour); it measures what the models add.`);
   // barres : écart d'erreur avec Elia, modèle choisi
   $("r-barres-titre").textContent = t(`Chaque jour : erreur de ${m} moins erreur d'Elia (MW)`, `Each day: ${m}'s error minus Elia's (MW)`);
   $("r-barres-note").textContent = t("Sous zéro (vert), nous avons fait mieux qu'Elia ce jour-là ; au-dessus (rouge), moins bien. Cliquez sur une barre pour ouvrir le jour.", "Below zero (green) we beat Elia that day; above (red) we did worse. Click a bar to open the day.");
@@ -206,10 +222,10 @@ function afficherResultats() {
   $("r-mois-titre").textContent = t(`Par mois : ${m} contre Elia`, `By month: ${m} vs Elia`);
   const M = {};
   joursPeriode("tout").filter((j) => etat.d.jours[j].s[m]).forEach((j) => { (M[j.slice(0, 7)] = M[j.slice(0, 7)] || []).push(j); });
-  $("r-mois").innerHTML = `<thead><tr><th>${t("Mois", "Month")}</th><th class="nombre">${t("Jours", "Days")}</th><th class="nombre">${t("Notre erreur (MW)", "Our error (MW)")}</th><th class="nombre">${t("Erreur d'Elia (MW)", "Elia's error (MW)")}</th><th class="nombre">${t("Écart", "Difference")}</th><th class="nombre">${t("Fourchettes : écart", "Ranges: difference")}</th><th class="nombre">${t("Jours gagnés", "Days won")}</th></tr></thead><tbody>`
+  $("r-mois").innerHTML = `<thead><tr><th>${t("Mois", "Month")}</th><th class="nombre">${t("Jours", "Days")}</th><th class="nombre">${t("Notre erreur (MW)", "Our error (MW)")}</th><th class="nombre">${t("Erreur d'Elia (MW)", "Elia's error (MW)")}</th><th class="nombre">${t("Contre Elia", "vs Elia")}</th><th class="nombre">${t("Contre le repère naïf", "vs naive")}</th><th class="nombre">${t("Fourchettes contre Elia", "Ranges vs Elia")}</th><th class="nombre">${t("Jours gagnés", "Days won")}</th></tr></thead><tbody>`
     + Object.keys(M).sort().reverse().map((k) => {
       const r = resume(M[k], m), nom = new Date(k + "-15").toLocaleDateString(FR() ? "fr-FR" : "en-GB", { month: "long", year: "numeric" });
-      return `<tr><td>${nom}</td><td class="nombre">${r.n}</td><td class="nombre">${nb(r.rmse)}</td><td class="nombre">${nb(r.e_rmse)}</td><td class="nombre">${signe(r.rmse / r.e_rmse - 1)}</td><td class="nombre">${signe(r.wink / r.e_wink - 1)}</td><td class="nombre">${r.gagnes} / ${r.n}</td></tr>`;
+      return `<tr><td>${nom}</td><td class="nombre">${r.n}</td><td class="nombre">${nb(r.rmse)}</td><td class="nombre">${nb(r.e_rmse)}</td><td class="nombre">${signe(r.rmse / r.e_rmse - 1)}</td><td class="nombre">${signe(r.m_rmse_n / r.n_rmse - 1)}</td><td class="nombre">${signe(r.wink / r.e_wink - 1)}</td><td class="nombre">${r.gagnes} / ${r.n}</td></tr>`;
     }).join("") + "</tbody>";
 }
 
